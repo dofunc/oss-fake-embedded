@@ -385,15 +385,18 @@ class OSSEmbeddedFakeServerTest {
     void survivesAProcessKilledFromOutside() throws IOException {
         final OSSEmbeddedFakeServer server = builder().build();
         server.start();
-        final String dataDir = server.getDataDir().toString();
-        final Optional<ProcessHandle> child = ProcessHandle.current().children()
-                .filter(p -> p.info().arguments().map(args -> List.of(args).contains(dataDir)).orElse(false))
-                .findFirst();
-        assertTrue(child.isPresent(), "oss-go-fake child process not found");
-        child.get().destroyForcibly();
-        child.get().onExit().join();
-        assertFalse(server.isActive());
-        assertDoesNotThrow(server::stop);
+        try {
+            // Match on the executable: Windows does not expose another process's arguments.
+            final Optional<ProcessHandle> child = ProcessHandle.current().children()
+                    .filter(p -> p.info().command().map(command -> command.endsWith(binaryName())).orElse(false))
+                    .findFirst();
+            assertTrue(child.isPresent(), "oss-go-fake child process not found");
+            child.get().destroyForcibly();
+            child.get().onExit().join();
+            assertFalse(server.isActive());
+        } finally {
+            assertDoesNotThrow(server::stop);
+        }
     }
 
     /** Copies a test script out of the classpath and makes it executable. */
